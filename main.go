@@ -138,7 +138,7 @@ func parseIllustId(input string) (result int, err error) {
 	if err == nil {
 		return
 	}
-	_, err = fmt.Scanf("https://www.pixiv.net/artworks/%d", &result)
+	_, err = fmt.Sscanf(input, "https://www.pixiv.net/artworks/%d", &result)
 	return
 }
 
