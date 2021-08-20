@@ -1,0 +1,8 @@
+<b>使用方法</b>
+1. <u>获取图片预览和介绍信息</u>
+直接向机器人发送形如 <code>https://www.pixiv.net/artworks/91779108</code> 的链接
+使用指令 <code>/pixiv https://www.pixiv.net/artworks/91779108</code> 或者 <code>/pixiv 91779108</code>
+也可以使用内联机器人语法
+2. <u>发送到关联频道（仅在拥有关联频道且发送用户与机器人均为频道管理员时生效）</u>
+用上述方法发送后点击发送到频道按钮（不支持内联模式）
+也可以直接使用 <code>/post https://www.pixiv.net/artworks/91779108</code> 或者 <code>/post 91779108</code> 指令

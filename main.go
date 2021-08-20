@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"flag"
 	"fmt"
 	"log"
@@ -15,11 +16,12 @@ import (
 )
 
 const (
-	INVALID_INPUT = "无效输入"
-	NO_LINK       = "找不到关联群组"
-	NO_ADMIN      = "无法读取管理员列表"
-	POST_SUCCESS  = "发送成功"
-	NO_PERMISSION = "用户没有发送权限"
+	INVALID_INPUT   = "无效输入"
+	NO_LINK         = "找不到关联群组"
+	NO_ADMIN        = "无法读取管理员列表"
+	POST_SUCCESS    = "发送成功"
+	POST_TO_CHANNEL = "发送到频道"
+	NO_PERMISSION   = "用户没有发送权限"
 )
 
 func fixString(input string) string {
@@ -160,7 +162,7 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 	btnArtwork := menu.URL("作品："+extracted.artwork.title, extracted.artwork.url)
 	btnAuthor := menu.URL("作者："+extracted.author.title, extracted.author.url)
 	if channel != nil {
-		btnPost := menu.Data("Post to channel", "post", illust.ID)
+		btnPost := menu.Data(POST_TO_CHANNEL, "post", illust.ID)
 		menu.Inline(menu.Row(btnPost), menu.Row(btnArtwork), menu.Row(btnAuthor))
 	} else {
 		menu.Inline(menu.Row(btnArtwork), menu.Row(btnAuthor))
@@ -174,6 +176,9 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 }
 
 func main() {
+	//go:embed help.txt
+	var helpMessage string
+
 	var token string
 	flag.StringVar(&token, "t", "", "Telegram token")
 	flag.Parse()
@@ -186,10 +191,10 @@ func main() {
 		return
 	}
 	bot.Handle("/help", func(m *tb.Message) {
-		bot.Send(m.Chat, "WIP")
+		bot.Send(m.Chat, helpMessage)
 	})
 	bot.Handle("/start", func(m *tb.Message) {
-		bot.Send(m.Chat, "WIP")
+		bot.Send(m.Chat, helpMessage)
 	})
 	bot.Handle("/pixiv", func(m *tb.Message) {
 		value, err := parseIllustId(m.Payload)
