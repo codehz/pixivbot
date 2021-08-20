@@ -115,7 +115,7 @@ func getPhoto(extracted extractedInfo, illust *pixiv.IllustData) *tb.Photo {
 
 func main() {
 	var token string
-	flag.StringVar(&token, "t", "token", "Telegram token")
+	flag.StringVar(&token, "t", "", "Telegram token")
 	flag.Parse()
 	bot, err := tb.NewBot(tb.Settings{
 		Token:  token,
