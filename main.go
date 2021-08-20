@@ -175,10 +175,10 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 	return
 }
 
-func main() {
-	//go:embed help.txt
-	var helpMessage string
+//go:embed help.txt
+var helpMessage string
 
+func main() {
 	var token string
 	flag.StringVar(&token, "t", "", "Telegram token")
 	flag.Parse()
