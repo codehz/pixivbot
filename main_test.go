@@ -22,3 +22,8 @@ func TestParseIllust(t *testing.T) {
 	assertNoError(t, err)
 	assertEqual(t, value, 92065303)
 }
+
+func TestIsAscii(t *testing.T) {
+	assertEqual(t, isAscii("background"), true)
+	assertEqual(t, isAscii("风景"), false)
+}
