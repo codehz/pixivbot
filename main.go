@@ -279,7 +279,7 @@ func main() {
 		bot.Respond(c, &tb.CallbackResponse{Text: NO_PERMISSION, ShowAlert: true})
 	})
 	bot.Handle(tb.OnText, func(m *tb.Message) {
-		value, err := parseIllustUrl(m.Payload)
+		value, err := parseIllustUrl(m.Text)
 		if err != nil {
 			return
 		}
