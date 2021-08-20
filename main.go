@@ -133,6 +133,15 @@ func getPhotoResult(extracted extractedInfo, illust *pixiv.IllustData) (result t
 	return
 }
 
+func parseIllustId(input string) (result int, err error) {
+	result, err = strconv.Atoi(input)
+	if err == nil {
+		return
+	}
+	_, err = fmt.Scanf("https://www.pixiv.net/artworks/%d", &result)
+	return
+}
+
 func main() {
 	var token string
 	flag.StringVar(&token, "t", "", "Telegram token")
@@ -152,7 +161,7 @@ func main() {
 		bot.Send(m.Chat, "WIP")
 	})
 	bot.Handle("/pixiv", func(m *tb.Message) {
-		value, err := strconv.Atoi(m.Payload)
+		value, err := parseIllustId(m.Payload)
 		if err != nil {
 			bot.Send(m.Chat, INVALID_INPUT)
 			return
@@ -186,7 +195,7 @@ func main() {
 		bot.Delete(m)
 	})
 	bot.Handle("/post", func(m *tb.Message) {
-		value, err := strconv.Atoi(m.Payload)
+		value, err := parseIllustId(m.Payload)
 		if err != nil {
 			bot.Send(m.Chat, INVALID_INPUT)
 			return
@@ -232,7 +241,7 @@ func main() {
 		}
 		for _, member := range members {
 			if member.User.ID == c.Sender.ID {
-				value, err := strconv.Atoi(c.Data)
+				value, err := parseIllustId(c.Data)
 				if err != nil {
 					bot.Respond(c, &tb.CallbackResponse{Text: INVALID_INPUT + ": " + err.Error(), ShowAlert: true})
 					return
@@ -260,7 +269,7 @@ func main() {
 		bot.Respond(c, &tb.CallbackResponse{Text: NO_PERMISSION, ShowAlert: true})
 	})
 	bot.Handle(tb.OnQuery, func(q *tb.Query) {
-		value, err := strconv.Atoi(q.Text)
+		value, err := parseIllustId(q.Text)
 		if err != nil {
 			bot.Answer(q, &tb.QueryResponse{
 				Results:      tb.Results{},
