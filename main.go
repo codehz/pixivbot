@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/codehz/pixivbot/pixiv"
 	tb "gopkg.in/tucnak/telebot.v2"
@@ -60,9 +61,9 @@ func (info titleWithURL) getLink(format string) string {
 	return fmt.Sprintf("<a href=\"%s\"><%s>%s</%s></a>", info.url, format, info.title, format)
 }
 
-func isEnglish(s string) bool {
+func isAscii(s string) bool {
 	for _, r := range s {
-		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && r != ' ' && r != '-' {
+		if r > unicode.MaxASCII {
 			return false
 		}
 	}
@@ -71,7 +72,7 @@ func isEnglish(s string) bool {
 
 func (info tagData) get() string {
 	if info.translation != "" {
-		if isEnglish(info.translation) {
+		if isAscii(info.translation) {
 			return fmt.Sprintf("<a href=\"%s\">#%s</a> <i>%s</i>", info.url, info.title, info.translation)
 		}
 		return fmt.Sprintf("<a href=\"%s\">#%s</a>", info.url, info.translation)
