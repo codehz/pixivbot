@@ -191,10 +191,18 @@ func main() {
 		return
 	}
 	bot.Handle("/help", func(m *tb.Message) {
-		bot.Send(m.Chat, helpMessage)
+		bot.Send(m.Chat, helpMessage, &tb.SendOptions{
+			DisableWebPagePreview: true,
+			ParseMode:             "html",
+			ReplyTo:               m,
+		})
 	})
 	bot.Handle("/start", func(m *tb.Message) {
-		bot.Send(m.Chat, helpMessage)
+		bot.Send(m.Chat, helpMessage, &tb.SendOptions{
+			DisableWebPagePreview: true,
+			ParseMode:             "html",
+			ReplyTo:               m,
+		})
 	})
 	bot.Handle("/pixiv", func(m *tb.Message) {
 		value, err := parseIllustId(m.Payload)
