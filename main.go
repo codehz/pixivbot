@@ -133,12 +133,43 @@ func getPhotoResult(extracted extractedInfo, illust *pixiv.IllustData) (result t
 	return
 }
 
+func parseIllustUrl(input string) (result int, err error) {
+	_, err = fmt.Sscanf(input, "https://www.pixiv.net/artworks/%d", &result)
+	return
+}
+
 func parseIllustId(input string) (result int, err error) {
 	result, err = strconv.Atoi(input)
 	if err == nil {
 		return
 	}
-	_, err = fmt.Sscanf(input, "https://www.pixiv.net/artworks/%d", &result)
+	result, err = parseIllustUrl(input)
+	return
+}
+
+func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error) {
+	bot.Notify(chat, tb.UploadingPhoto)
+	illust, err := pixiv.GetIllust(id)
+	if err != nil {
+		return
+	}
+	extracted := extractPixiv(illust)
+	photo := getPhoto(extracted, illust)
+	channel := getLinkedChat(bot, chat)
+	menu := &tb.ReplyMarkup{}
+	btnArtwork := menu.URL("作品："+extracted.artwork.title, extracted.artwork.url)
+	btnAuthor := menu.URL("作者："+extracted.author.title, extracted.author.url)
+	if channel != nil {
+		btnPost := menu.Data("Post to channel", "post", illust.ID)
+		menu.Inline(menu.Row(btnPost), menu.Row(btnArtwork), menu.Row(btnAuthor))
+	} else {
+		menu.Inline(menu.Row(btnArtwork), menu.Row(btnAuthor))
+	}
+	_, err = bot.Send(chat, photo, &tb.SendOptions{
+		DisableWebPagePreview: true,
+		ParseMode:             "html",
+		ReplyTo:               reply,
+	}, menu)
 	return
 }
 
@@ -166,30 +197,9 @@ func main() {
 			bot.Send(m.Chat, INVALID_INPUT)
 			return
 		}
-		bot.Notify(m.Chat, tb.UploadingPhoto)
-		illust, err := pixiv.GetIllust(value)
+		err = makePixiv(bot, m.Chat, value, nil)
 		if err != nil {
 			bot.Send(m.Chat, err.Error())
-			return
-		}
-		extracted := extractPixiv(illust)
-		photo := getPhoto(extracted, illust)
-		channel := getLinkedChat(bot, m.Chat)
-		menu := &tb.ReplyMarkup{}
-		btnArtwork := menu.URL("作品："+extracted.artwork.title, extracted.artwork.url)
-		btnAuthor := menu.URL("作者："+extracted.author.title, extracted.author.url)
-		if channel != nil {
-			btnPost := menu.Data("Post to channel", "post", m.Payload)
-			menu.Inline(menu.Row(btnPost), menu.Row(btnArtwork), menu.Row(btnAuthor))
-		} else {
-			menu.Inline(menu.Row(btnArtwork), menu.Row(btnAuthor))
-		}
-		_, err = bot.Send(m.Chat, photo, &tb.SendOptions{
-			DisableWebPagePreview: true,
-			ParseMode:             "html",
-		}, menu)
-		if err != nil {
-			log.Printf("Send error: %s", err)
 			return
 		}
 		bot.Delete(m)
@@ -267,6 +277,17 @@ func main() {
 			}
 		}
 		bot.Respond(c, &tb.CallbackResponse{Text: NO_PERMISSION, ShowAlert: true})
+	})
+	bot.Handle(tb.OnText, func(m *tb.Message) {
+		value, err := parseIllustUrl(m.Payload)
+		if err != nil {
+			return
+		}
+		err = makePixiv(bot, m.Chat, value, m)
+		if err != nil {
+			bot.Send(m.Chat, err.Error())
+			return
+		}
 	})
 	bot.Handle(tb.OnQuery, func(q *tb.Query) {
 		value, err := parseIllustId(q.Text)
