@@ -123,7 +123,7 @@ func getPhotoResult(extracted extractedInfo, illust *pixiv.IllustData) (result t
 	result = &tb.PhotoResult{
 		URL:         illust.Urls.Regular,
 		ParseMode:   tb.ModeHTML,
-		ThumbURL:    illust.Urls.Thumb,
+		ThumbURL:    illust.Urls.Small,
 		Description: extracted.author.title,
 		Title:       extracted.artwork.title,
 		Caption:     buffer.String(),
