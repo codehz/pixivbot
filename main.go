@@ -48,7 +48,6 @@ type tagData struct {
 }
 
 type extractedInfo struct {
-	title   string
 	artwork titleWithURL
 	author  titleWithURL
 	tags    []tagData
@@ -81,7 +80,6 @@ func (info tagData) get() string {
 }
 
 func extractPixiv(data *pixiv.IllustData) (info extractedInfo) {
-	info.title = data.Title
 	info.artwork.title = data.Title
 	info.artwork.url = "https://www.pixiv.net/artworks/" + data.ID
 	info.author.title = data.UserName
@@ -111,6 +109,27 @@ func getPhoto(extracted extractedInfo, illust *pixiv.IllustData) *tb.Photo {
 		fmt.Fprintf(&buffer, "%s ", tag.get())
 	}
 	return &tb.Photo{File: tb.FromURL(illust.Urls.Regular), Caption: buffer.String()}
+}
+
+func getPhotoResult(extracted extractedInfo, illust *pixiv.IllustData) (result tb.Result) {
+	var buffer bytes.Buffer
+	fmt.Fprintf(&buffer, "%s - %s的插画\n", extracted.artwork.getLink("b"), extracted.author.getLink("i"))
+	buffer.WriteString(fixString(illust.IllustComment))
+	buffer.WriteByte('\n')
+	for i := 0; i < len(extracted.tags); i++ {
+		tag := extracted.tags[i]
+		fmt.Fprintf(&buffer, "%s ", tag.get())
+	}
+	result = &tb.PhotoResult{
+		URL:         illust.Urls.Regular,
+		ParseMode:   tb.ModeHTML,
+		ThumbURL:    illust.Urls.Thumb,
+		Description: extracted.author.title,
+		Title:       extracted.artwork.title,
+		Caption:     buffer.String(),
+	}
+	result.SetResultID(illust.IllustID)
+	return
 }
 
 func main() {
@@ -147,7 +166,7 @@ func main() {
 		photo := getPhoto(extracted, illust)
 		channel := getLinkedChat(bot, m.Chat)
 		menu := &tb.ReplyMarkup{}
-		btnArtwork := menu.URL("作品："+extracted.title, extracted.artwork.url)
+		btnArtwork := menu.URL("作品："+extracted.artwork.title, extracted.artwork.url)
 		btnAuthor := menu.URL("作者："+extracted.author.title, extracted.author.url)
 		if channel != nil {
 			btnPost := menu.Data("Post to channel", "post", m.Payload)
@@ -237,7 +256,33 @@ func main() {
 				return
 			}
 		}
-		bot.Respond(c, &tb.CallbackResponse{Text: "权限检查失败", ShowAlert: true})
+		bot.Respond(c, &tb.CallbackResponse{Text: NO_PERMISSION, ShowAlert: true})
+	})
+	bot.Handle(tb.OnQuery, func(q *tb.Query) {
+		value, err := strconv.Atoi(q.Text)
+		if err != nil {
+			bot.Answer(q, &tb.QueryResponse{
+				Results:      tb.Results{},
+				CacheTime:    10,
+				SwitchPMText: INVALID_INPUT,
+			})
+			return
+		}
+		illust, err := pixiv.GetIllust(value)
+		if err != nil {
+			bot.Answer(q, &tb.QueryResponse{
+				Results:      tb.Results{},
+				CacheTime:    10,
+				SwitchPMText: err.Error(),
+			})
+			return
+		}
+		extracted := extractPixiv(illust)
+		result := getPhotoResult(extracted, illust)
+		bot.Answer(q, &tb.QueryResponse{
+			Results:   tb.Results{result},
+			CacheTime: 10,
+		})
 	})
 	bot.Start()
 }
