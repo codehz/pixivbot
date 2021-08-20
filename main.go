@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codehz/pixivbot/src/pixiv"
+	"github.com/codehz/pixivbot/pixiv"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
 
