@@ -106,7 +106,8 @@ func extractPixiv(data *pixiv.DetailsApi) (info extractedInfo) {
 
 func getCaption(extracted extractedInfo, illust *pixiv.DetailsApi) string {
 	var buffer bytes.Buffer
-	fmt.Fprintf(&buffer, "%s - %s的插画\n", extracted.artwork.getLink("b"), extracted.author.getLink("i"))
+	fmt.Fprintf(&buffer, "%s %s - %s的插画\n", extracted.tags[0].getLink("#"), extracted.artwork.getLink("b"), extracted.author.getLink("i"))
+	fmt.Fprintf(&buffer, "👏 %s ❤️ %d 👁️ %s\n", illust.IllustDetails.RatingCount, illust.IllustDetails.BookmarkUserTotal, illust.IllustDetails.RatingView)
 	buffer.WriteString(fixString(illust.IllustDetails.CommentHTML))
 	buffer.WriteByte('\n')
 	for i := 0; i < len(extracted.tags); i++ {
