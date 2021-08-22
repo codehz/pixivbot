@@ -186,6 +186,14 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 	extracted := extractPixiv(details)
 	photo := getPhoto(extracted, details)
 	channel := getLinkedChat(bot, chat)
+	if chat.Type == tb.ChatChannel || chat.Type == tb.ChatChannelPrivate {
+		_, err = bot.Send(chat, photo, &tb.SendOptions{
+			DisableWebPagePreview: true,
+			ParseMode:             "html",
+			ReplyTo:               reply,
+		})
+		return
+	}
 	menu := &tb.ReplyMarkup{}
 	btnArtwork := menu.URL("作品："+extracted.artwork.title, extracted.artwork.url)
 	btnAuthor := menu.URL("作者："+extracted.author.title, extracted.author.url)
