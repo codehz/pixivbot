@@ -129,8 +129,9 @@ func getAlbum(id int, extracted extractedInfo, details *pixiv.DetailsApi) (album
 	album = make(tb.Album, count)
 	caption := getCaption(extracted, details)
 	for i, page := range pages[:count] {
-		album[i] = &tb.Photo{File: tb.FromURL(page.URL), Caption: caption}
+		album[i] = &tb.Photo{File: tb.FromURL(page.URL)}
 	}
+	album[0].(*tb.Photo).Caption = caption
 	return
 }
 
