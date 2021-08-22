@@ -208,7 +208,7 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 	return
 }
 
-func makeAlbum(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error) {
+func makeAlbum(bot *tb.Bot, chat *tb.Chat, id int) (err error) {
 	bot.Notify(chat, tb.UploadingPhoto)
 	details, err := pixiv.GetDetils(id)
 	if err != nil {
@@ -296,7 +296,7 @@ func main() {
 			bot.Send(m.Chat, INVALID_INPUT)
 			return
 		}
-		err = makeAlbum(bot, m.Chat, value, nil)
+		err = makeAlbum(bot, m.Chat, value)
 		if err != nil {
 			bot.Send(m.Chat, err.Error())
 			return
@@ -309,23 +309,12 @@ func main() {
 			bot.Send(m.Chat, INVALID_INPUT)
 			return
 		}
-		details, err := pixiv.GetDetils(value)
-		if err != nil {
-			bot.Send(m.Chat, err.Error())
-			return
-		}
 		channel := getLinkedChat(bot, m.Chat)
 		if channel == nil {
 			bot.Send(m.Chat, NO_LINK)
 			return
 		}
-		bot.Notify(channel, tb.UploadingPhoto)
-		extracted := extractPixiv(details)
-		photo := getPhoto(extracted, details)
-		_, err = bot.Send(channel, photo, &tb.SendOptions{
-			DisableWebPagePreview: true,
-			ParseMode:             "html",
-		})
+		err = makePixiv(bot, channel, value, nil)
 		if err != nil {
 			bot.Send(m.Chat, err.Error())
 			return
@@ -338,24 +327,12 @@ func main() {
 			bot.Send(m.Chat, INVALID_INPUT)
 			return
 		}
-		details, err := pixiv.GetDetils(value)
-		if err != nil {
-			bot.Send(m.Chat, err.Error())
-			return
-		}
 		linked := getLinkedChat(bot, m.Chat)
 		if linked == nil {
 			bot.Send(m.Chat, NO_LINK)
 			return
 		}
-		bot.Notify(linked, tb.UploadingPhoto)
-		extracted := extractPixiv(details)
-		album, err := getAlbum(value, extracted, details)
-		if err != nil {
-			bot.Send(m.Chat, err.Error())
-			return
-		}
-		_, err = bot.SendAlbum(linked, album)
+		err = makeAlbum(bot, linked, value)
 		if err != nil {
 			bot.Send(m.Chat, err.Error())
 			return
@@ -373,17 +350,7 @@ func main() {
 			bot.Respond(c, &tb.CallbackResponse{Text: INVALID_INPUT + ": " + err.Error(), ShowAlert: true})
 			return
 		}
-		details, err := pixiv.GetDetils(value)
-		if err != nil {
-			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
-			return
-		}
-		extracted := extractPixiv(details)
-		photo := getPhoto(extracted, details)
-		_, err = bot.Send(linked, photo, &tb.SendOptions{
-			DisableWebPagePreview: true,
-			ParseMode:             "html",
-		})
+		err = makePixiv(bot, linked, value, nil)
 		if err != nil {
 			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
 			return
@@ -402,21 +369,7 @@ func main() {
 			bot.Respond(c, &tb.CallbackResponse{Text: INVALID_INPUT + ": " + err.Error(), ShowAlert: true})
 			return
 		}
-		details, err := pixiv.GetDetils(value)
-		if err != nil {
-			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
-			return
-		}
-		extracted := extractPixiv(details)
-		album, err := getAlbum(value, extracted, details)
-		if err != nil {
-			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
-			return
-		}
-		_, err = bot.SendAlbum(linked, album, &tb.SendOptions{
-			DisableWebPagePreview: true,
-			ParseMode:             "html",
-		})
+		err = makeAlbum(bot, linked, value)
 		if err != nil {
 			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
 			return
