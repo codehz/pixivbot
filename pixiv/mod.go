@@ -28,29 +28,19 @@ func buildRequest(url string) (data []byte, err error) {
 func decodeResponse(res PixivResponse, data []byte) error {
 	err := json.Unmarshal(data, &res)
 	if err != nil {
+		println(string(data))
 		return fmt.Errorf("failed to parse json")
 	}
 	return res.GetError()
 }
 
-func GetIllust(id int) (*IllustData, error) {
-	url := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%d", id)
+func GetDetils(id int) (*DetailsApi, error) {
+	url := fmt.Sprintf("https://www.pixiv.net/touch/ajax/illust/details?illust_id=%d", id)
 	data, err := buildRequest(url)
 	if err != nil {
 		return nil, err
 	}
-	var illres IllustResponse
-	err = decodeResponse(&illres, data)
-	return illres.Body, err
-}
-
-func GetIllustPages(id int) ([]IllustPage, error) {
-	url := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%d/pages", id)
-	data, err := buildRequest(url)
-	if err != nil {
-		return nil, err
-	}
-	var illres IllustPagesResponse
-	err = decodeResponse(&illres, data)
-	return illres.Body, err
+	var details DetailsResponse
+	err = decodeResponse(&details, data)
+	return details.Body, err
 }

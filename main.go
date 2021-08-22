@@ -84,12 +84,12 @@ func (info tagData) get() string {
 	return fmt.Sprintf("<a href=\"%s\">#%s</a>", info.url, info.title)
 }
 
-func extractPixiv(data *pixiv.IllustData) (info extractedInfo) {
-	info.artwork.title = data.Title
-	info.artwork.url = "https://www.pixiv.net/artworks/" + data.ID
-	info.author.title = data.UserName
-	info.author.url = "https://www.pixiv.net/users/" + data.UserID
-	tags := data.Tags.Tags
+func extractPixiv(data *pixiv.DetailsApi) (info extractedInfo) {
+	info.artwork.title = data.IllustDetails.Title
+	info.artwork.url = "https://www.pixiv.net/artworks/" + data.IllustDetails.ID
+	info.author.title = data.AuthorDetails.UserName
+	info.author.url = "https://www.pixiv.net/users/" + data.AuthorDetails.UserID
+	tags := data.IllustDetails.DisplayTags
 	info.tags = make([]tagData, len(tags))
 	for i := 0; i < len(tags); i++ {
 		tag := tags[i]
@@ -98,16 +98,16 @@ func extractPixiv(data *pixiv.IllustData) (info extractedInfo) {
 				title: tag.Tag,
 				url:   fmt.Sprintf("https://www.pixiv.net/tags/%s/artworks", tag.Tag),
 			},
-			translation: tag.GetTranslation(),
+			translation: tag.Translation,
 		}
 	}
 	return
 }
 
-func getCaption(extracted extractedInfo, illust *pixiv.IllustData) string {
+func getCaption(extracted extractedInfo, illust *pixiv.DetailsApi) string {
 	var buffer bytes.Buffer
 	fmt.Fprintf(&buffer, "%s - %s的插画\n", extracted.artwork.getLink("b"), extracted.author.getLink("i"))
-	buffer.WriteString(fixString(illust.IllustComment))
+	buffer.WriteString(fixString(illust.IllustDetails.CommentHTML))
 	buffer.WriteByte('\n')
 	for i := 0; i < len(extracted.tags); i++ {
 		tag := extracted.tags[i]
@@ -116,33 +116,34 @@ func getCaption(extracted extractedInfo, illust *pixiv.IllustData) string {
 	return buffer.String()
 }
 
-func getPhoto(extracted extractedInfo, illust *pixiv.IllustData) *tb.Photo {
-	return &tb.Photo{File: tb.FromURL(illust.Urls.Regular), Caption: getCaption(extracted, illust)}
+func getPhoto(extracted extractedInfo, illust *pixiv.DetailsApi) *tb.Photo {
+	return &tb.Photo{File: tb.FromURL(illust.IllustDetails.URL), Caption: getCaption(extracted, illust)}
 }
 
-func getAlbum(id int, extracted extractedInfo, illust *pixiv.IllustData) (album tb.Album, err error) {
-	pages, err := pixiv.GetIllustPages(id)
-	if err != nil {
-		return
+func getAlbum(id int, extracted extractedInfo, details *pixiv.DetailsApi) (album tb.Album, err error) {
+	pages := details.IllustDetails.MangaA
+	count := len(pages)
+	if count > 10 {
+		count = 10
 	}
-	album = make(tb.Album, len(pages))
-	caption := getCaption(extracted, illust)
-	for i, page := range pages {
-		album[i] = &tb.Photo{File: tb.FromURL(page.Urls.Regular), Caption: caption}
+	album = make(tb.Album, count)
+	caption := getCaption(extracted, details)
+	for i, page := range pages[:count] {
+		album[i] = &tb.Photo{File: tb.FromURL(page.URL), Caption: caption}
 	}
 	return
 }
 
-func getPhotoResult(extracted extractedInfo, illust *pixiv.IllustData) (result tb.Result) {
+func getPhotoResult(extracted extractedInfo, illust *pixiv.DetailsApi) (result tb.Result) {
 	result = &tb.PhotoResult{
-		URL:         illust.Urls.Regular,
+		URL:         illust.IllustDetails.URL,
 		ParseMode:   tb.ModeHTML,
-		ThumbURL:    illust.Urls.Small,
+		ThumbURL:    illust.IllustDetails.URL,
 		Description: extracted.author.title,
 		Title:       extracted.artwork.title,
 		Caption:     getCaption(extracted, illust),
 	}
-	result.SetResultID(illust.IllustID)
+	result.SetResultID(illust.IllustDetails.ID)
 	return
 }
 
@@ -176,20 +177,20 @@ func parseIllustId(input string) (result int, err error) {
 
 func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error) {
 	bot.Notify(chat, tb.UploadingPhoto)
-	illust, err := pixiv.GetIllust(id)
+	details, err := pixiv.GetDetils(id)
 	if err != nil {
 		return
 	}
-	extracted := extractPixiv(illust)
-	photo := getPhoto(extracted, illust)
+	extracted := extractPixiv(details)
+	photo := getPhoto(extracted, details)
 	channel := getLinkedChat(bot, chat)
 	menu := &tb.ReplyMarkup{}
 	btnArtwork := menu.URL("作品："+extracted.artwork.title, extracted.artwork.url)
 	btnAuthor := menu.URL("作者："+extracted.author.title, extracted.author.url)
 	if channel != nil {
-		btnPost := menu.Data(POST_TO_CHANNEL, "post", illust.ID)
-		if illust.PageCount > 1 {
-			btnPostMulti := menu.Data(fmt.Sprintf(POST_ALBUM_TO_CHANNEL, illust.PageCount), "post-multi", illust.ID)
+		btnPost := menu.Data(POST_TO_CHANNEL, "post", details.IllustDetails.ID)
+		if len(details.IllustDetails.MangaA) > 1 {
+			btnPostMulti := menu.Data(fmt.Sprintf(POST_ALBUM_TO_CHANNEL, len(details.IllustDetails.MangaA)), "post-multi", details.IllustDetails.ID)
 			menu.Inline(menu.Row(btnPost), menu.Row(btnPostMulti), menu.Row(btnArtwork), menu.Row(btnAuthor))
 		} else {
 			menu.Inline(menu.Row(btnPost), menu.Row(btnArtwork), menu.Row(btnAuthor))
@@ -207,12 +208,12 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 
 func makeAlbum(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error) {
 	bot.Notify(chat, tb.UploadingPhoto)
-	illust, err := pixiv.GetIllust(id)
+	details, err := pixiv.GetDetils(id)
 	if err != nil {
 		return
 	}
-	extracted := extractPixiv(illust)
-	album, err := getAlbum(id, extracted, illust)
+	extracted := extractPixiv(details)
+	album, err := getAlbum(id, extracted, details)
 	if err != nil {
 		return
 	}
@@ -306,7 +307,7 @@ func main() {
 			bot.Send(m.Chat, INVALID_INPUT)
 			return
 		}
-		illust, err := pixiv.GetIllust(value)
+		details, err := pixiv.GetDetils(value)
 		if err != nil {
 			bot.Send(m.Chat, err.Error())
 			return
@@ -317,8 +318,8 @@ func main() {
 			return
 		}
 		bot.Notify(channel, tb.UploadingPhoto)
-		extracted := extractPixiv(illust)
-		photo := getPhoto(extracted, illust)
+		extracted := extractPixiv(details)
+		photo := getPhoto(extracted, details)
 		_, err = bot.Send(channel, photo, &tb.SendOptions{
 			DisableWebPagePreview: true,
 			ParseMode:             "html",
@@ -335,7 +336,7 @@ func main() {
 			bot.Send(m.Chat, INVALID_INPUT)
 			return
 		}
-		illust, err := pixiv.GetIllust(value)
+		details, err := pixiv.GetDetils(value)
 		if err != nil {
 			bot.Send(m.Chat, err.Error())
 			return
@@ -346,8 +347,8 @@ func main() {
 			return
 		}
 		bot.Notify(linked, tb.UploadingPhoto)
-		extracted := extractPixiv(illust)
-		album, err := getAlbum(value, extracted, illust)
+		extracted := extractPixiv(details)
+		album, err := getAlbum(value, extracted, details)
 		if err != nil {
 			bot.Send(m.Chat, err.Error())
 			return
@@ -370,13 +371,13 @@ func main() {
 			bot.Respond(c, &tb.CallbackResponse{Text: INVALID_INPUT + ": " + err.Error(), ShowAlert: true})
 			return
 		}
-		illust, err := pixiv.GetIllust(value)
+		details, err := pixiv.GetDetils(value)
 		if err != nil {
 			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
 			return
 		}
-		extracted := extractPixiv(illust)
-		photo := getPhoto(extracted, illust)
+		extracted := extractPixiv(details)
+		photo := getPhoto(extracted, details)
 		_, err = bot.Send(linked, photo, &tb.SendOptions{
 			DisableWebPagePreview: true,
 			ParseMode:             "html",
@@ -399,13 +400,13 @@ func main() {
 			bot.Respond(c, &tb.CallbackResponse{Text: INVALID_INPUT + ": " + err.Error(), ShowAlert: true})
 			return
 		}
-		illust, err := pixiv.GetIllust(value)
+		details, err := pixiv.GetDetils(value)
 		if err != nil {
 			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
 			return
 		}
-		extracted := extractPixiv(illust)
-		album, err := getAlbum(value, extracted, illust)
+		extracted := extractPixiv(details)
+		album, err := getAlbum(value, extracted, details)
 		if err != nil {
 			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
 			return
@@ -442,7 +443,7 @@ func main() {
 			})
 			return
 		}
-		illust, err := pixiv.GetIllust(value)
+		details, err := pixiv.GetDetils(value)
 		if err != nil {
 			bot.Answer(q, &tb.QueryResponse{
 				Results:      tb.Results{},
@@ -451,8 +452,8 @@ func main() {
 			})
 			return
 		}
-		extracted := extractPixiv(illust)
-		result := getPhotoResult(extracted, illust)
+		extracted := extractPixiv(details)
+		result := getPhotoResult(extracted, details)
 		bot.Answer(q, &tb.QueryResponse{
 			Results:   tb.Results{result},
 			CacheTime: 10,
