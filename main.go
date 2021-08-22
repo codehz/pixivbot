@@ -16,12 +16,13 @@ import (
 )
 
 const (
-	INVALID_INPUT   = "无效输入"
-	NO_LINK         = "找不到关联群组"
-	NO_ADMIN        = "无法读取管理员列表"
-	POST_SUCCESS    = "发送成功"
-	POST_TO_CHANNEL = "发送到频道"
-	NO_PERMISSION   = "用户没有发送权限"
+	INVALID_INPUT         = "无效输入"
+	NO_LINK               = "找不到关联群组"
+	NO_ADMIN              = "无法读取管理员列表: %e"
+	POST_SUCCESS          = "发送成功"
+	POST_TO_CHANNEL       = "发送到频道"
+	POST_ALBUM_TO_CHANNEL = "发送图集到频道（%d 张）"
+	NO_PERMISSION         = "用户没有发送权限"
 )
 
 func fixString(input string) string {
@@ -118,6 +119,19 @@ func getPhoto(extracted extractedInfo, illust *pixiv.IllustData) *tb.Photo {
 	return &tb.Photo{File: tb.FromURL(illust.Urls.Regular), Caption: getCaption(extracted, illust)}
 }
 
+func getAlbum(id int, extracted extractedInfo, illust *pixiv.IllustData) (album tb.Album, err error) {
+	pages, err := pixiv.GetIllustPages(id)
+	if err != nil {
+		return
+	}
+	album = make(tb.Album, len(pages))
+	caption := getCaption(extracted, illust)
+	for i, page := range pages {
+		album[i] = &tb.Photo{File: tb.FromURL(page.Urls.Regular), Caption: caption}
+	}
+	return
+}
+
 func getPhotoResult(extracted extractedInfo, illust *pixiv.IllustData) (result tb.Result) {
 	result = &tb.PhotoResult{
 		URL:         illust.Urls.Regular,
@@ -159,7 +173,12 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 	btnAuthor := menu.URL("作者："+extracted.author.title, extracted.author.url)
 	if channel != nil {
 		btnPost := menu.Data(POST_TO_CHANNEL, "post", illust.ID)
-		menu.Inline(menu.Row(btnPost), menu.Row(btnArtwork), menu.Row(btnAuthor))
+		if illust.PageCount > 1 {
+			btnPostMulti := menu.Data(fmt.Sprintf(POST_ALBUM_TO_CHANNEL, illust.PageCount), "post-multi", illust.ID)
+			menu.Inline(menu.Row(btnPost), menu.Row(btnPostMulti), menu.Row(btnArtwork), menu.Row(btnAuthor))
+		} else {
+			menu.Inline(menu.Row(btnPost), menu.Row(btnArtwork), menu.Row(btnAuthor))
+		}
 	} else {
 		menu.Inline(menu.Row(btnArtwork), menu.Row(btnAuthor))
 	}
@@ -169,6 +188,46 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 		ReplyTo:               reply,
 	}, menu)
 	return
+}
+
+func makeAlbum(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error) {
+	bot.Notify(chat, tb.UploadingPhoto)
+	illust, err := pixiv.GetIllust(id)
+	if err != nil {
+		return
+	}
+	extracted := extractPixiv(illust)
+	album, err := getAlbum(id, extracted, illust)
+	if err != nil {
+		return
+	}
+	_, err = bot.SendAlbum(chat, album, &tb.SendOptions{
+		DisableWebPagePreview: true,
+		ParseMode:             "html",
+	})
+	return
+}
+
+func precheckInlineButton(bot *tb.Bot, c *tb.Callback) (*tb.Chat, error) {
+	ochat := c.Message.OriginalChat
+	if ochat == nil {
+		ochat = c.Message.Chat
+	}
+	bot.Notify(ochat, tb.Typing)
+	linked := getLinkedChat(bot, ochat)
+	if linked == nil {
+		return nil, fmt.Errorf(NO_LINK)
+	}
+	members, err := bot.AdminsOf(linked)
+	if err != nil {
+		return nil, fmt.Errorf(NO_ADMIN, err)
+	}
+	for _, member := range members {
+		if member.User.ID == c.Sender.ID {
+			return linked, nil
+		}
+	}
+	return nil, fmt.Errorf(NO_PERMISSION)
 }
 
 //go:embed help.txt
@@ -213,6 +272,19 @@ func main() {
 		}
 		bot.Delete(m)
 	})
+	bot.Handle("/album", func(m *tb.Message) {
+		value, err := parseIllustId(m.Payload)
+		if err != nil {
+			bot.Send(m.Chat, INVALID_INPUT)
+			return
+		}
+		err = makeAlbum(bot, m.Chat, value, nil)
+		if err != nil {
+			bot.Send(m.Chat, err.Error())
+			return
+		}
+		bot.Delete(m)
+	})
 	bot.Handle("/post", func(m *tb.Message) {
 		value, err := parseIllustId(m.Payload)
 		if err != nil {
@@ -237,55 +309,102 @@ func main() {
 			ParseMode:             "html",
 		})
 		if err != nil {
-			log.Printf("Send error: %s", err)
+			bot.Send(m.Chat, err.Error())
+			return
+		}
+		bot.Delete(m)
+	})
+	bot.Handle("/post-multi", func(m *tb.Message) {
+		value, err := parseIllustId(m.Payload)
+		if err != nil {
+			bot.Send(m.Chat, INVALID_INPUT)
+			return
+		}
+		illust, err := pixiv.GetIllust(value)
+		if err != nil {
+			bot.Send(m.Chat, err.Error())
+			return
+		}
+		linked := getLinkedChat(bot, m.Chat)
+		if linked == nil {
+			bot.Send(m.Chat, NO_LINK)
+			return
+		}
+		bot.Notify(linked, tb.UploadingPhoto)
+		extracted := extractPixiv(illust)
+		album, err := getAlbum(value, extracted, illust)
+		if err != nil {
+			bot.Send(m.Chat, err.Error())
+			return
+		}
+		_, err = bot.SendAlbum(linked, album)
+		if err != nil {
+			bot.Send(m.Chat, err.Error())
 			return
 		}
 		bot.Delete(m)
 	})
 	bot.Handle(&tb.InlineButton{Unique: "post"}, func(c *tb.Callback) {
-		ochat := c.Message.OriginalChat
-		if ochat == nil {
-			ochat = c.Message.Chat
-		}
-		bot.Notify(ochat, tb.Typing)
-		linked := getLinkedChat(bot, ochat)
-		if linked == nil {
-			bot.Respond(c, &tb.CallbackResponse{Text: NO_LINK, ShowAlert: true})
-			return
-		}
-		members, err := bot.AdminsOf(linked)
+		linked, err := precheckInlineButton(bot, c)
 		if err != nil {
-			bot.Respond(c, &tb.CallbackResponse{Text: NO_ADMIN + ": " + err.Error(), ShowAlert: true})
+			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
 			return
 		}
-		for _, member := range members {
-			if member.User.ID == c.Sender.ID {
-				value, err := parseIllustId(c.Data)
-				if err != nil {
-					bot.Respond(c, &tb.CallbackResponse{Text: INVALID_INPUT + ": " + err.Error(), ShowAlert: true})
-					return
-				}
-				illust, err := pixiv.GetIllust(value)
-				if err != nil {
-					bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
-					return
-				}
-				extracted := extractPixiv(illust)
-				photo := getPhoto(extracted, illust)
-				_, err = bot.Send(linked, photo, &tb.SendOptions{
-					DisableWebPagePreview: true,
-					ParseMode:             "html",
-				})
-				if err != nil {
-					bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
-					return
-				}
-				bot.Respond(c, &tb.CallbackResponse{Text: POST_SUCCESS})
-				bot.Delete(c.Message)
-				return
-			}
+		value, err := parseIllustId(c.Data)
+		if err != nil {
+			bot.Respond(c, &tb.CallbackResponse{Text: INVALID_INPUT + ": " + err.Error(), ShowAlert: true})
+			return
 		}
-		bot.Respond(c, &tb.CallbackResponse{Text: NO_PERMISSION, ShowAlert: true})
+		illust, err := pixiv.GetIllust(value)
+		if err != nil {
+			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
+			return
+		}
+		extracted := extractPixiv(illust)
+		photo := getPhoto(extracted, illust)
+		_, err = bot.Send(linked, photo, &tb.SendOptions{
+			DisableWebPagePreview: true,
+			ParseMode:             "html",
+		})
+		if err != nil {
+			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
+			return
+		}
+		bot.Respond(c, &tb.CallbackResponse{Text: POST_SUCCESS})
+		bot.Delete(c.Message)
+	})
+	bot.Handle(&tb.InlineButton{Unique: "post-multi"}, func(c *tb.Callback) {
+		linked, err := precheckInlineButton(bot, c)
+		if err != nil {
+			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
+			return
+		}
+		value, err := parseIllustId(c.Data)
+		if err != nil {
+			bot.Respond(c, &tb.CallbackResponse{Text: INVALID_INPUT + ": " + err.Error(), ShowAlert: true})
+			return
+		}
+		illust, err := pixiv.GetIllust(value)
+		if err != nil {
+			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
+			return
+		}
+		extracted := extractPixiv(illust)
+		album, err := getAlbum(value, extracted, illust)
+		if err != nil {
+			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
+			return
+		}
+		_, err = bot.SendAlbum(linked, album, &tb.SendOptions{
+			DisableWebPagePreview: true,
+			ParseMode:             "html",
+		})
+		if err != nil {
+			bot.Respond(c, &tb.CallbackResponse{Text: err.Error(), ShowAlert: true})
+			return
+		}
+		bot.Respond(c, &tb.CallbackResponse{Text: POST_SUCCESS})
+		bot.Delete(c.Message)
 	})
 	bot.Handle(tb.OnText, func(m *tb.Message) {
 		value, err := parseIllustUrl(m.Text)

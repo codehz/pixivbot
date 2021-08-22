@@ -7,8 +7,7 @@ import (
 	"net/http"
 )
 
-func GetIllust(id int) (*IllustData, error) {
-	url := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%d", id)
+func buildRequest(url string) (data []byte, err error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http request: %e", err)
@@ -19,17 +18,39 @@ func GetIllust(id int) (*IllustData, error) {
 		return nil, fmt.Errorf("failed to request url: %e", err)
 	}
 	defer response.Body.Close()
-	data, err := io.ReadAll(response.Body)
+	data, err = io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read data: %e", err)
 	}
-	var illres IllustResponse
-	err = json.Unmarshal(data, &illres)
+	return
+}
+
+func decodeResponse(res PixivResponse, data []byte) error {
+	err := json.Unmarshal(data, &res)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse json")
+		return fmt.Errorf("failed to parse json")
 	}
-	if illres.IsError {
-		return nil, fmt.Errorf("server error: %s", illres.ErrorMessage)
+	return res.GetError()
+}
+
+func GetIllust(id int) (*IllustData, error) {
+	url := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%d", id)
+	data, err := buildRequest(url)
+	if err != nil {
+		return nil, err
 	}
-	return illres.Body, nil
+	var illres IllustResponse
+	err = decodeResponse(&illres, data)
+	return illres.Body, err
+}
+
+func GetIllustPages(id int) ([]IllustPage, error) {
+	url := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%d/pages", id)
+	data, err := buildRequest(url)
+	if err != nil {
+		return nil, err
+	}
+	var illres IllustPagesResponse
+	err = decodeResponse(&illres, data)
+	return illres.Body, err
 }

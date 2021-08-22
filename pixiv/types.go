@@ -1,6 +1,9 @@
 package pixiv
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Urls struct {
 	Mini     string `json:"mini"`
@@ -88,8 +91,38 @@ type IllustData struct {
 	IsUnlisted              bool                    `json:"isUnlisted"`
 }
 
+type PixivResponse interface {
+	GetError() error
+}
+
 type IllustResponse struct {
 	IsError      bool        `json:"error"`
 	ErrorMessage string      `json:"message"`
 	Body         *IllustData `json:"body"`
+}
+
+func (res IllustResponse) GetError() error {
+	if res.IsError {
+		return fmt.Errorf("server error: %s", res.ErrorMessage)
+	}
+	return nil
+}
+
+type IllustPage struct {
+	Urls   Urls `json:"urls"`
+	Width  int  `json:"width"`
+	Height int  `json:"height"`
+}
+
+type IllustPagesResponse struct {
+	IsError      bool         `json:"error"`
+	ErrorMessage string       `json:"message"`
+	Body         []IllustPage `json:"body"`
+}
+
+func (res IllustPagesResponse) GetError() error {
+	if res.IsError {
+		return fmt.Errorf("server error: %s", res.ErrorMessage)
+	}
+	return nil
 }
