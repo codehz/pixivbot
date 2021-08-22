@@ -102,7 +102,7 @@ func extractPixiv(data *pixiv.IllustData) (info extractedInfo) {
 	return
 }
 
-func getPhoto(extracted extractedInfo, illust *pixiv.IllustData) *tb.Photo {
+func getCaption(extracted extractedInfo, illust *pixiv.IllustData) string {
 	var buffer bytes.Buffer
 	fmt.Fprintf(&buffer, "%s - %s的插画\n", extracted.artwork.getLink("b"), extracted.author.getLink("i"))
 	buffer.WriteString(fixString(illust.IllustComment))
@@ -111,25 +111,21 @@ func getPhoto(extracted extractedInfo, illust *pixiv.IllustData) *tb.Photo {
 		tag := extracted.tags[i]
 		fmt.Fprintf(&buffer, "%s ", tag.get())
 	}
-	return &tb.Photo{File: tb.FromURL(illust.Urls.Regular), Caption: buffer.String()}
+	return buffer.String()
+}
+
+func getPhoto(extracted extractedInfo, illust *pixiv.IllustData) *tb.Photo {
+	return &tb.Photo{File: tb.FromURL(illust.Urls.Regular), Caption: getCaption(extracted, illust)}
 }
 
 func getPhotoResult(extracted extractedInfo, illust *pixiv.IllustData) (result tb.Result) {
-	var buffer bytes.Buffer
-	fmt.Fprintf(&buffer, "%s - %s的插画\n", extracted.artwork.getLink("b"), extracted.author.getLink("i"))
-	buffer.WriteString(fixString(illust.IllustComment))
-	buffer.WriteByte('\n')
-	for i := 0; i < len(extracted.tags); i++ {
-		tag := extracted.tags[i]
-		fmt.Fprintf(&buffer, "%s ", tag.get())
-	}
 	result = &tb.PhotoResult{
 		URL:         illust.Urls.Regular,
 		ParseMode:   tb.ModeHTML,
 		ThumbURL:    illust.Urls.Small,
 		Description: extracted.author.title,
 		Title:       extracted.artwork.title,
-		Caption:     buffer.String(),
+		Caption:     getCaption(extracted, illust),
 	}
 	result.SetResultID(illust.IllustID)
 	return
