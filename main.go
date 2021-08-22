@@ -187,16 +187,17 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 	menu := &tb.ReplyMarkup{}
 	btnArtwork := menu.URL("作品："+extracted.artwork.title, extracted.artwork.url)
 	btnAuthor := menu.URL("作者："+extracted.author.title, extracted.author.url)
+	btnDownload := menu.URL("下载原图", details.IllustDetails.URLOriginal)
 	if channel != nil {
 		btnPost := menu.Data(POST_TO_CHANNEL, "post", details.IllustDetails.ID)
 		if len(details.IllustDetails.MangaA) > 1 {
 			btnPostMulti := menu.Data(fmt.Sprintf(POST_ALBUM_TO_CHANNEL, len(details.IllustDetails.MangaA)), "post-multi", details.IllustDetails.ID)
-			menu.Inline(menu.Row(btnPost), menu.Row(btnPostMulti), menu.Row(btnArtwork), menu.Row(btnAuthor))
+			menu.Inline(menu.Row(btnPost), menu.Row(btnPostMulti), menu.Row(btnArtwork), menu.Row(btnAuthor), menu.Row(btnDownload))
 		} else {
-			menu.Inline(menu.Row(btnPost), menu.Row(btnArtwork), menu.Row(btnAuthor))
+			menu.Inline(menu.Row(btnPost), menu.Row(btnArtwork), menu.Row(btnAuthor), menu.Row(btnDownload))
 		}
 	} else {
-		menu.Inline(menu.Row(btnArtwork), menu.Row(btnAuthor))
+		menu.Inline(menu.Row(btnArtwork), menu.Row(btnAuthor), menu.Row(btnDownload))
 	}
 	_, err = bot.Send(chat, photo, &tb.SendOptions{
 		DisableWebPagePreview: true,
