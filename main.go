@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/codehz/pixivbot/pixiv"
+	"github.com/microcosm-cc/bluemonday"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
 
@@ -25,6 +26,8 @@ const (
 	POST_ALBUM_TO_CHANNEL = "发送图集到频道（%d 张）"
 	NO_PERMISSION         = "用户没有发送权限"
 )
+
+var htmlPolicy bluemonday.Policy
 
 func fixString(input string) string {
 	return strings.ReplaceAll(input, "<br />", "\n")
@@ -108,7 +111,7 @@ func getCaption(extracted extractedInfo, illust *pixiv.DetailsApi) string {
 	var buffer bytes.Buffer
 	fmt.Fprintf(&buffer, "%s %s - %s的插画\n", extracted.tags[0].getLink("#"), extracted.artwork.getLink("b"), extracted.author.getLink("i"))
 	fmt.Fprintf(&buffer, "👏 %s ❤️ %d 👁️ %s\n", illust.IllustDetails.RatingCount, illust.IllustDetails.BookmarkUserTotal, illust.IllustDetails.RatingView)
-	buffer.WriteString(fixString(illust.IllustDetails.CommentHTML))
+	buffer.WriteString(htmlPolicy.Sanitize(fixString(illust.IllustDetails.CommentHTML)))
 	buffer.WriteByte('\n')
 	for i := 0; i < len(extracted.tags); i++ {
 		tag := extracted.tags[i]
@@ -272,6 +275,17 @@ func main() {
 		log.Fatal(err)
 		return
 	}
+
+	htmlPolicy = *bluemonday.NewPolicy()
+
+	htmlPolicy.AllowStandardURLs()
+	htmlPolicy.AllowAttrs("href").OnElements("a")
+	htmlPolicy.AllowNoAttrs().OnElements(
+		"b", "i", "u", "s",
+		"strong", "em", "ins", "strike", "del",
+		"code", "pre",
+	)
+
 	bot.Handle("/help", func(m *tb.Message) {
 		bot.Send(m.Chat, helpMessage, &tb.SendOptions{
 			DisableWebPagePreview: true,
