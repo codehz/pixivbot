@@ -57,6 +57,17 @@ type TitleCaptionTranslation struct {
 	WorkCaption interface{} `json:"work_caption"`
 }
 
+type UgoiraFrame struct {
+	File  string `json:"file"`
+	Delay int    `json:"delay"`
+}
+
+type UgoiraMeta struct {
+	Src      string        `json:"src"`
+	MimeType string        `json:"mime_type"`
+	Frames   []UgoiraFrame `json:"frames"`
+}
+
 type IllustDetails struct {
 	URL                     string                  `json:"url"`
 	URLThumb                string                  `json:"url_s"`
@@ -69,7 +80,7 @@ type IllustDetails struct {
 	DisplayTags             []DisplayTags           `json:"display_tags"`
 	TagsEditable            bool                    `json:"tags_editable"`
 	BookmarkUserTotal       int                     `json:"bookmark_user_total"`
-	UgoiraMeta              interface{}             `json:"ugoira_meta"`
+	UgoiraMeta              UgoiraMeta              `json:"ugoira_meta"`
 	ShareText               string                  `json:"share_text"`
 	Request                 interface{}             `json:"request"`
 	Meta                    Meta                    `json:"meta"`
