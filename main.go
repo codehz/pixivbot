@@ -331,7 +331,7 @@ func main() {
 		}
 		bot.Delete(m)
 	})
-	bot.Handle("/post-multi", func(m *tb.Message) {
+	bot.Handle("/postalbum", func(m *tb.Message) {
 		value, err := parseIllustId(m.Payload)
 		if err != nil {
 			bot.Send(m.Chat, INVALID_INPUT)
