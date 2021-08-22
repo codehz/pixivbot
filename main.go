@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -146,7 +147,21 @@ func getPhotoResult(extracted extractedInfo, illust *pixiv.IllustData) (result t
 }
 
 func parseIllustUrl(input string) (result int, err error) {
-	_, err = fmt.Sscanf(input, "https://www.pixiv.net/artworks/%d", &result)
+	u, err := url.Parse(input)
+	if err != nil {
+		return
+	}
+	if u.Scheme != "https" || u.Host != "www.pixiv.net" {
+		return 0, fmt.Errorf("not a pixiv link")
+	}
+	_, err = fmt.Sscanf(u.Path, "/artworks/%d", &result)
+	if err == nil {
+		return
+	}
+	if u.Path == "/member_illust.php" {
+		return strconv.Atoi(u.Query().Get("illust_id"))
+	}
+	err = fmt.Errorf("not a illust link")
 	return
 }
 
