@@ -153,7 +153,7 @@ func parseIllustUrl(input string) (result int, err error) {
 	if err != nil {
 		return
 	}
-	if u.Scheme != "https" || u.Host != "www.pixiv.net" {
+	if u.Scheme != "https" || (u.Host != "www.pixiv.net" && u.Host != "pixiv.net") {
 		return 0, fmt.Errorf("not a pixiv link")
 	}
 	_, err = fmt.Sscanf(u.Path, "/artworks/%d", &result)
