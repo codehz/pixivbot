@@ -122,7 +122,7 @@ func getCaption(extracted extractedInfo, details *pixiv.DetailsApi) string {
 }
 
 func proxyURL(original string, details *pixiv.DetailsApi) string {
-	if proxied == "" || details.IllustDetails.XRestrict == "0" {
+	if proxied == "" {
 		return original
 	}
 	ourl, err := url.Parse(original)
