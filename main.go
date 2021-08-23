@@ -28,6 +28,7 @@ const (
 )
 
 var htmlPolicy bluemonday.Policy
+var proxied string
 
 func fixString(input string) string {
 	return strings.ReplaceAll(input, "<br />", "\n")
@@ -87,12 +88,12 @@ func (info tagData) get() string {
 	return fmt.Sprintf("<a href=\"%s\">#%s</a>", info.url, info.title)
 }
 
-func extractPixiv(data *pixiv.DetailsApi) (info extractedInfo) {
-	info.artwork.title = data.IllustDetails.Title
-	info.artwork.url = "https://www.pixiv.net/artworks/" + data.IllustDetails.ID
-	info.author.title = data.AuthorDetails.UserName
-	info.author.url = "https://www.pixiv.net/users/" + data.AuthorDetails.UserID
-	tags := data.IllustDetails.DisplayTags
+func extractPixiv(details *pixiv.DetailsApi) (info extractedInfo) {
+	info.artwork.title = details.IllustDetails.Title
+	info.artwork.url = "https://www.pixiv.net/artworks/" + details.IllustDetails.ID
+	info.author.title = details.AuthorDetails.UserName
+	info.author.url = "https://www.pixiv.net/users/" + details.AuthorDetails.UserID
+	tags := details.IllustDetails.DisplayTags
 	info.tags = make([]tagData, len(tags))
 	for i := 0; i < len(tags); i++ {
 		tag := tags[i]
@@ -107,11 +108,11 @@ func extractPixiv(data *pixiv.DetailsApi) (info extractedInfo) {
 	return
 }
 
-func getCaption(extracted extractedInfo, illust *pixiv.DetailsApi) string {
+func getCaption(extracted extractedInfo, details *pixiv.DetailsApi) string {
 	var buffer bytes.Buffer
 	fmt.Fprintf(&buffer, "%s %s - %s的插画\n", extracted.tags[0].getLink("#"), extracted.artwork.getLink("b"), extracted.author.getLink("i"))
-	fmt.Fprintf(&buffer, "👏 %s ❤️ %d 👁️ %s\n", illust.IllustDetails.RatingCount, illust.IllustDetails.BookmarkUserTotal, illust.IllustDetails.RatingView)
-	buffer.WriteString(htmlPolicy.Sanitize(fixString(illust.IllustDetails.CommentHTML)))
+	fmt.Fprintf(&buffer, "👏 %s ❤️ %d 👁️ %s\n", details.IllustDetails.RatingCount, details.IllustDetails.BookmarkUserTotal, details.IllustDetails.RatingView)
+	buffer.WriteString(htmlPolicy.Sanitize(fixString(details.IllustDetails.CommentHTML)))
 	buffer.WriteByte('\n')
 	for i := 0; i < len(extracted.tags); i++ {
 		tag := extracted.tags[i]
@@ -120,8 +121,20 @@ func getCaption(extracted extractedInfo, illust *pixiv.DetailsApi) string {
 	return buffer.String()
 }
 
-func getPhoto(extracted extractedInfo, illust *pixiv.DetailsApi) *tb.Photo {
-	return &tb.Photo{File: tb.FromURL(illust.IllustDetails.URL), Caption: getCaption(extracted, illust)}
+func proxyURL(original string, details *pixiv.DetailsApi) string {
+	if proxied == "" || details.IllustDetails.XRestrict == "0" {
+		return original
+	}
+	ourl, err := url.Parse(original)
+	if err != nil {
+		return original
+	}
+	ourl.Host = proxied
+	return ourl.String()
+}
+
+func getPhoto(extracted extractedInfo, details *pixiv.DetailsApi) *tb.Photo {
+	return &tb.Photo{File: tb.FromURL(proxyURL(details.IllustDetails.URL, details)), Caption: getCaption(extracted, details)}
 }
 
 func getAlbum(id int, extracted extractedInfo, details *pixiv.DetailsApi) (album tb.Album, err error) {
@@ -133,22 +146,23 @@ func getAlbum(id int, extracted extractedInfo, details *pixiv.DetailsApi) (album
 	album = make(tb.Album, count)
 	caption := getCaption(extracted, details)
 	for i, page := range pages[:count] {
-		album[i] = &tb.Photo{File: tb.FromURL(page.URL)}
+		album[i] = &tb.Photo{File: tb.FromURL(proxyURL(page.URL, details))}
 	}
 	album[0].(*tb.Photo).Caption = caption
 	return
 }
 
-func getPhotoResult(extracted extractedInfo, illust *pixiv.DetailsApi) (result tb.Result) {
+func getPhotoResult(extracted extractedInfo, details *pixiv.DetailsApi) (result tb.Result) {
+	ourl := proxyURL(details.IllustDetails.URL, details)
 	result = &tb.PhotoResult{
-		URL:         illust.IllustDetails.URL,
+		URL:         ourl,
 		ParseMode:   tb.ModeHTML,
-		ThumbURL:    illust.IllustDetails.URL,
+		ThumbURL:    ourl,
 		Description: extracted.author.title,
 		Title:       extracted.artwork.title,
-		Caption:     getCaption(extracted, illust),
+		Caption:     getCaption(extracted, details),
 	}
-	result.SetResultID(illust.IllustDetails.ID)
+	result.SetResultID(details.IllustDetails.ID)
 	return
 }
 
@@ -266,6 +280,7 @@ var helpMessage string
 func main() {
 	var token string
 	flag.StringVar(&token, "t", "", "Telegram token")
+	flag.StringVar(&proxied, "p", "", "i.pximg.net proxy for bypass restrict")
 	flag.Parse()
 	bot, err := tb.NewBot(tb.Settings{
 		Token:  token,
