@@ -279,10 +279,13 @@ var helpMessage string
 
 func main() {
 	var token string
+	var localapi string
 	flag.StringVar(&token, "t", "", "Telegram token")
 	flag.StringVar(&proxied, "p", "", "i.pximg.net proxy for bypass restrict")
+	flag.StringVar(&localapi, "l", "", "Local telegram api server address")
 	flag.Parse()
 	bot, err := tb.NewBot(tb.Settings{
+		URL:    localapi,
 		Token:  token,
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	})
