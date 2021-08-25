@@ -6,7 +6,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 
@@ -101,11 +100,8 @@ func tryEncodeJpeg(buffer *fixedBuffer, img image.Image, quality int) ([]byte, e
 
 func resizeImage(img image.Image) image.Image {
 	size := img.Bounds().Size()
-	if size.X+size.Y > 10000 {
-		scaler := 10000.0 / float64(size.X+size.Y)
-		width := int(math.Floor(float64(size.X) * scaler))
-		height := int(math.Floor(float64(size.Y) * scaler))
-		return imaging.Fit(img, width, height, imaging.Lanczos)
+	if size.X > 2560 || size.Y > 2560 {
+		return imaging.Fit(img, 2560, 2560, imaging.Lanczos)
 	}
 	return img
 }
