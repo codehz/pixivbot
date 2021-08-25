@@ -6,9 +6,11 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 
+	"github.com/disintegration/imaging"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
 
@@ -86,29 +88,42 @@ func (method ProxiedURL) FromURL(source string) (tb.File, error) {
 	return tb.FromURL(base), nil
 }
 
-func tryEncodeJpeg(buffer *bytes.Buffer, img image.Image, quality int) ([]byte, error) {
-	buffer.Reset()
+func tryEncodeJpeg(buffer *fixedBuffer, img image.Image, quality int) ([]byte, error) {
+	buffer.reset()
 	err := jpeg.Encode(buffer, img, &jpeg.Options{
 		Quality: quality,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return buffer.Bytes(), nil
+	return buffer.bytes(), nil
+}
+
+func resizeImage(img image.Image) image.Image {
+	size := img.Bounds().Size()
+	if size.X+size.Y > 10000 {
+		scaler := 10000.0 / float64(size.X+size.Y)
+		width := int(math.Floor(float64(size.X) * scaler))
+		height := int(math.Floor(float64(size.Y) * scaler))
+		return imaging.Fit(img, width, height, imaging.Lanczos)
+	}
+	return img
 }
 
 func encodeJpeg(img image.Image) ([]byte, error) {
 	var quality int = 100
-	var buffer bytes.Buffer
+	buffer := makeFixedBuffer(10 * 1048576)
 	for {
-		temp, err := tryEncodeJpeg(&buffer, img, quality)
+		data, err := tryEncodeJpeg(&buffer, img, quality)
 		if err != nil {
+			if _, ok := err.(tooBigError); ok {
+				println("tooBig", quality)
+				quality -= 10
+				continue
+			}
 			return nil, err
 		}
-		if len(temp) < 10*1048576 {
-			return temp, nil
-		}
-		quality -= 10
+		return data, nil
 	}
 }
 
@@ -117,7 +132,7 @@ func pngToJpeg(r io.Reader) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return encodeJpeg(img)
+	return encodeJpeg(resizeImage(img))
 }
 
 func (method Download) FromURL(source string) (tb.File, error) {
