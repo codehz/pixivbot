@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/codehz/pixivbot/pixiv"
+	"github.com/codehz/pixivbot/pixiv/downloader"
 	"github.com/microcosm-cc/bluemonday"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
@@ -28,7 +29,8 @@ const (
 )
 
 var htmlPolicy bluemonday.Policy
-var proxied string
+var imagedownloader downloader.ImageFetcher
+var altimagedownloader downloader.InlineImageFetcher
 
 func fixString(input string) string {
 	return strings.ReplaceAll(input, "<br />", "\n")
@@ -121,20 +123,12 @@ func getCaption(extracted extractedInfo, details *pixiv.DetailsApi) string {
 	return buffer.String()
 }
 
-func proxyURL(original string, details *pixiv.DetailsApi) string {
-	if proxied == "" {
-		return original
-	}
-	ourl, err := url.Parse(original)
+func getPhoto(extracted extractedInfo, details *pixiv.DetailsApi) (*tb.Photo, error) {
+	file, err := imagedownloader.FetchImage(details.IllustDetails)
 	if err != nil {
-		return original
+		return nil, err
 	}
-	ourl.Host = proxied
-	return ourl.String()
-}
-
-func getPhoto(extracted extractedInfo, details *pixiv.DetailsApi) *tb.Photo {
-	return &tb.Photo{File: tb.FromURL(proxyURL(details.IllustDetails.URL, details)), Caption: getCaption(extracted, details)}
+	return &tb.Photo{File: file, Caption: getCaption(extracted, details)}, nil
 }
 
 func getAlbum(id int, extracted extractedInfo, details *pixiv.DetailsApi) (album tb.Album, err error) {
@@ -146,14 +140,21 @@ func getAlbum(id int, extracted extractedInfo, details *pixiv.DetailsApi) (album
 	album = make(tb.Album, count)
 	caption := getCaption(extracted, details)
 	for i, page := range pages[:count] {
-		album[i] = &tb.Photo{File: tb.FromURL(proxyURL(page.URL, details))}
+		file, err := imagedownloader.FetchImage(page)
+		if err != nil {
+			return nil, err
+		}
+		album[i] = &tb.Photo{File: file}
 	}
 	album[0].(*tb.Photo).Caption = caption
 	return
 }
 
-func getPhotoResult(extracted extractedInfo, details *pixiv.DetailsApi) (result tb.Result) {
-	ourl := proxyURL(details.IllustDetails.URL, details)
+func getPhotoResult(extracted extractedInfo, details *pixiv.DetailsApi) (result tb.Result, err error) {
+	ourl, err := altimagedownloader.GetImageUrl(details.IllustDetails)
+	if err != nil {
+		return
+	}
 	result = &tb.PhotoResult{
 		URL:         ourl,
 		ParseMode:   tb.ModeHTML,
@@ -201,7 +202,10 @@ func makePixiv(bot *tb.Bot, chat *tb.Chat, id int, reply *tb.Message) (err error
 		return
 	}
 	extracted := extractPixiv(details)
-	photo := getPhoto(extracted, details)
+	photo, err := getPhoto(extracted, details)
+	if err != nil {
+		return
+	}
 	channel := getLinkedChat(bot, chat)
 	if chat.Type == tb.ChatChannel || chat.Type == tb.ChatChannelPrivate {
 		_, err = bot.Send(chat, photo, &tb.SendOptions{
@@ -279,11 +283,39 @@ var helpMessage string
 
 func main() {
 	var token string
+	var proxied string
 	var localapi string
 	flag.StringVar(&token, "t", "", "Telegram token")
 	flag.StringVar(&proxied, "p", "", "i.pximg.net proxy for bypass restrict")
 	flag.StringVar(&localapi, "l", "", "Local telegram api server address")
 	flag.Parse()
+	if localapi != "" {
+		imagedownloader = downloader.ImageFetcher{
+			UploadMethod: downloader.Download{},
+			Original:     true,
+		}
+	} else if proxied != "" {
+		imagedownloader = downloader.ImageFetcher{
+			UploadMethod: downloader.ProxiedURL{ProxyHost: proxied},
+			Original:     false,
+		}
+	} else {
+		imagedownloader = downloader.ImageFetcher{
+			UploadMethod: downloader.DirectURL{},
+			Original:     false,
+		}
+	}
+	if proxied != "" {
+		altimagedownloader = downloader.InlineImageFetcher{
+			InlineImageSource: downloader.ProxiedURL{ProxyHost: proxied},
+			Original:          true,
+		}
+	} else {
+		altimagedownloader = downloader.InlineImageFetcher{
+			InlineImageSource: downloader.DirectURL{},
+			Original:          false,
+		}
+	}
 	bot, err := tb.NewBot(tb.Settings{
 		URL:    localapi,
 		Token:  token,
@@ -449,7 +481,15 @@ func main() {
 			return
 		}
 		extracted := extractPixiv(details)
-		result := getPhotoResult(extracted, details)
+		result, err := getPhotoResult(extracted, details)
+		if err != nil {
+			bot.Answer(q, &tb.QueryResponse{
+				Results:      tb.Results{},
+				CacheTime:    10,
+				SwitchPMText: err.Error(),
+			})
+			return
+		}
 		bot.Answer(q, &tb.QueryResponse{
 			Results:   tb.Results{result},
 			CacheTime: 10,

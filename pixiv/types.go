@@ -6,12 +6,22 @@ type IllustImages struct {
 	IllustImageWidth  string `json:"illust_image_width"`
 	IllustImageHeight string `json:"illust_image_height"`
 }
+
 type MangaA struct {
-	Page     int    `json:"page"`
-	URL      string `json:"url"`
-	URLSmall string `json:"url_small"`
-	URLBig   string `json:"url_big"`
+	Page        int    `json:"page"`
+	URL         string `json:"url"`
+	URLSmall    string `json:"url_small"`
+	URLOriginal string `json:"url_big"`
 }
+
+func (manga MangaA) GetSmallImage() string {
+	return manga.URL
+}
+
+func (manga MangaA) GetOriginalImage() string {
+	return manga.URLOriginal
+}
+
 type DisplayTags struct {
 	Tag                     string `json:"tag"`
 	IsPixpediaArticleExists bool   `json:"is_pixpedia_article_exists"`
@@ -111,6 +121,14 @@ type IllustDetails struct {
 	RatingCount             string                  `json:"rating_count"`
 	RatingView              string                  `json:"rating_view"`
 	CommentHTML             string                  `json:"comment_html"`
+}
+
+func (details IllustDetails) GetSmallImage() string {
+	return details.URL
+}
+
+func (details IllustDetails) GetOriginalImage() string {
+	return details.URLOriginal
 }
 
 type ProfileImg struct {
