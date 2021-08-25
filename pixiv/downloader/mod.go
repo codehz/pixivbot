@@ -2,6 +2,8 @@ package downloader
 
 import (
 	"bytes"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"net/url"
@@ -83,6 +85,16 @@ func (method ProxiedURL) FromURL(source string) (tb.File, error) {
 	return tb.FromURL(base), nil
 }
 
+func encodeJpeg(w io.Writer, r io.Reader) error {
+	img, err := png.Decode(r)
+	if err != nil {
+		return err
+	}
+	return jpeg.Encode(w, img, &jpeg.Options{
+		Quality: 100,
+	})
+}
+
 func (method Download) FromURL(source string) (tb.File, error) {
 	request, err := http.NewRequest("GET", source, nil)
 	if err != nil {
@@ -94,6 +106,15 @@ func (method Download) FromURL(source string) (tb.File, error) {
 		return tb.File{}, err
 	}
 	defer response.Body.Close()
+	contentType := response.Header.Get("Content-Type")
+	if contentType == "image/png" {
+		buffer := &bytes.Buffer{}
+		err = encodeJpeg(buffer, response.Body)
+		if err != nil {
+			return tb.File{}, err
+		}
+		return tb.FromReader(buffer), nil
+	}
 	data, err := io.ReadAll(response.Body)
 	if err != nil {
 		return tb.File{}, err
