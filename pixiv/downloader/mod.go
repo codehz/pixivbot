@@ -113,7 +113,6 @@ func encodeJpeg(img image.Image) ([]byte, error) {
 		data, err := tryEncodeJpeg(&buffer, img, quality)
 		if err != nil {
 			if _, ok := err.(tooBigError); ok {
-				println("tooBig", quality)
 				quality -= 10
 				continue
 			}
