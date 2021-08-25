@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"bytes"
+	"image"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -85,14 +86,38 @@ func (method ProxiedURL) FromURL(source string) (tb.File, error) {
 	return tb.FromURL(base), nil
 }
 
-func encodeJpeg(w io.Writer, r io.Reader) error {
+func tryEncodeJpeg(buffer *bytes.Buffer, img image.Image, quality int) ([]byte, error) {
+	buffer.Reset()
+	err := jpeg.Encode(buffer, img, &jpeg.Options{
+		Quality: quality,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func encodeJpeg(img image.Image) ([]byte, error) {
+	var quality int = 100
+	var buffer bytes.Buffer
+	for {
+		temp, err := tryEncodeJpeg(&buffer, img, quality)
+		if err != nil {
+			return nil, err
+		}
+		if len(temp) < 10*1048576 {
+			return temp, nil
+		}
+		quality -= 10
+	}
+}
+
+func pngToJpeg(r io.Reader) ([]byte, error) {
 	img, err := png.Decode(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return jpeg.Encode(w, img, &jpeg.Options{
-		Quality: 100,
-	})
+	return encodeJpeg(img)
 }
 
 func (method Download) FromURL(source string) (tb.File, error) {
@@ -108,12 +133,11 @@ func (method Download) FromURL(source string) (tb.File, error) {
 	defer response.Body.Close()
 	contentType := response.Header.Get("Content-Type")
 	if contentType == "image/png" {
-		buffer := &bytes.Buffer{}
-		err = encodeJpeg(buffer, response.Body)
+		data, err := pngToJpeg(response.Body)
 		if err != nil {
 			return tb.File{}, err
 		}
-		return tb.FromReader(buffer), nil
+		return tb.FromReader(bytes.NewReader(data)), nil
 	}
 	data, err := io.ReadAll(response.Body)
 	if err != nil {
