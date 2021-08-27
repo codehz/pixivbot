@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"image"
 	"image/jpeg"
-	"image/png"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,6 +11,8 @@ import (
 	"github.com/disintegration/imaging"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
+
+const MAX_IMG_SIZE = 10 * 1048576
 
 type ImageSource interface {
 	GetSmallImage() string
@@ -98,17 +99,17 @@ func tryEncodeJpeg(buffer *fixedBuffer, img image.Image, quality int) ([]byte, e
 	return buffer.bytes(), nil
 }
 
-func resizeImage(img image.Image) image.Image {
+func resizeImage(img image.Image) (image.Image, bool) {
 	size := img.Bounds().Size()
 	if size.X > 2560 || size.Y > 2560 {
-		return imaging.Fit(img, 2560, 2560, imaging.Lanczos)
+		return imaging.Fit(img, 2560, 2560, imaging.Lanczos), true
 	}
-	return img
+	return img, false
 }
 
 func encodeJpeg(img image.Image) ([]byte, error) {
 	var quality int = 100
-	buffer := makeFixedBuffer(10 * 1048576)
+	buffer := makeFixedBuffer(MAX_IMG_SIZE)
 	for {
 		data, err := tryEncodeJpeg(&buffer, img, quality)
 		if err != nil {
@@ -122,12 +123,20 @@ func encodeJpeg(img image.Image) ([]byte, error) {
 	}
 }
 
-func pngToJpeg(r io.Reader) ([]byte, error) {
-	img, err := png.Decode(r)
+func compressImage(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	return encodeJpeg(resizeImage(img))
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	newimg, resized := resizeImage(img)
+	if !resized && len(data) < MAX_IMG_SIZE {
+		return data, nil
+	}
+	return encodeJpeg(newimg)
 }
 
 func (method Download) FromURL(source string) (tb.File, error) {
@@ -141,15 +150,7 @@ func (method Download) FromURL(source string) (tb.File, error) {
 		return tb.File{}, err
 	}
 	defer response.Body.Close()
-	contentType := response.Header.Get("Content-Type")
-	if contentType == "image/png" {
-		data, err := pngToJpeg(response.Body)
-		if err != nil {
-			return tb.File{}, err
-		}
-		return tb.FromReader(bytes.NewReader(data)), nil
-	}
-	data, err := io.ReadAll(response.Body)
+	data, err := compressImage(response.Body)
 	if err != nil {
 		return tb.File{}, err
 	}
